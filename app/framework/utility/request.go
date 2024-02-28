@@ -1,15 +1,19 @@
 package utility
 
 type Request struct {
-	method string
-	path   string
-	params map[string]string
+	Method string
+	Path   string
+	Params map[string]string
 }
 
+
 func HandleSetRequest(method string, path string, params map[string]string) Request {
-	return Request{
-		method: method,
-		params: params,
-		path:   path,
+	request := Request{
+		Method: method,
+		Params: params,
+		Path:   path,
 	}
+
+
+	return request
 }

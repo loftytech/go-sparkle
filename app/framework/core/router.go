@@ -53,9 +53,10 @@ func (r *RequestRoute) resolveRequestRoute(w *http.ResponseWriter) {
 		// }
 
 		request := utility.HandleSetRequest(v.method, v.path, param_map)
+
 		v.handler(w, &request)
 
-		fmt.Println("request match: ", request)
+		// fmt.Println("request match: ", request)
 	}
 }
 

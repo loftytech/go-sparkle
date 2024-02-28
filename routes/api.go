@@ -16,9 +16,8 @@ func Register() {
 	})
 
 	router.Get("/v1/profile/:username/fetch", func(w *http.ResponseWriter, req *utility.Request) {
-		request := &req
 
-		fmt.Fprintf(*w, "Current route profile, %s", request)
+		fmt.Fprintf(*w, "Current route profile, %s", req.Params["username"])
 
 	})
 
