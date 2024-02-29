@@ -1,7 +1,7 @@
 package core
 
 import (
-	utility "coralscale/app/framework/utility"
+	"coralscale/app/framework/utility"
 	"fmt"
 	"net/http"
 	"strings"
@@ -24,6 +24,9 @@ func (r *RequestRoute) resolveRequestRoute(w *http.ResponseWriter) {
 
 		splited_path := strings.Split(r.path[1:], "/")
 		req_path_len := len(splited_path)
+
+		fmt.Println("r.method: ", r.method)
+		fmt.Println("v.method: ", v.method)
 
 		if req_path_len != v.pathArrLen || r.method != v.method {
 			continue
@@ -52,9 +55,10 @@ func (r *RequestRoute) resolveRequestRoute(w *http.ResponseWriter) {
 		// 	param_map[value] = splited_path[idx]
 		// }
 
-		request := utility.HandleSetRequest(v.method, v.path, param_map)
+		request := utility.HandleSetRequest(v.method, v.path, param_map, w)
+		response := utility.Response{ResponseWriter: w}
 
-		v.handler(w, &request)
+		v.handler(&response, &request)
 
 		// fmt.Println("request match: ", request)
 	}
@@ -66,7 +70,7 @@ type Route struct {
 	pathArrLen         int
 	filteredParamsPath string
 	params             map[int]string
-	handler            func(w *http.ResponseWriter, request *utility.Request)
+	handler            func(*utility.Response, *utility.Request)
 }
 
 func (r *Route) resolveRoute() {
@@ -95,28 +99,28 @@ func (r *Route) resolveRoute() {
 
 var route_list = []Route{}
 
-func Get(path string, handler func(w *http.ResponseWriter, request *utility.Request)) {
+func Get(path string, handler func(response *utility.Response, request *utility.Request)) {
 	validateRoute("GET", path, handler)
 }
 
-func Post(path string, handler func(w *http.ResponseWriter, request *utility.Request)) {
+func Post(path string, handler func(response *utility.Response, request *utility.Request)) {
 	validateRoute("POST", path, handler)
 }
 
-func Patch(path string, handler func(w *http.ResponseWriter, request *utility.Request)) {
+func Patch(path string, handler func(response *utility.Response, request *utility.Request)) {
 	validateRoute("PATCH", path, handler)
 }
 
-func Put(path string, handler func(w *http.ResponseWriter, request *utility.Request)) {
+func Put(path string, handler func(response *utility.Response, request *utility.Request)) {
 	validateRoute("PUT", path, handler)
 }
 
-func Delete(path string, handler func(w *http.ResponseWriter, request *utility.Request)) {
+func Delete(path string, handler func(response *utility.Response, request *utility.Request)) {
 	validateRoute("DRLETE", path, handler)
 }
 
-func validateRoute(method string, path string, handler func(w *http.ResponseWriter, request *utility.Request)) {
-	route := Route{method: "GET", path: path, handler: handler}
+func validateRoute(method string, path string, handler func(response *utility.Response, request *utility.Request)) {
+	route := Route{method: method, path: path, handler: handler}
 	route.resolveRoute()
 	route_list = append(route_list, route)
 }

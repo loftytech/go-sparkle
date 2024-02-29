@@ -3,22 +3,25 @@ package routes
 import (
 	router "coralscale/app/framework/core"
 	"coralscale/app/framework/utility"
-	"fmt"
-	"net/http"
 )
 
 func Register() {
 
-	router.Post("/v1/login", func(w *http.ResponseWriter, request *utility.Request) {
+	router.Post("/v1/login", func(res *utility.Response, req *utility.Request) {
 
-		fmt.Fprintf(*w, "Current route login")
+		res.Send(utility.CustomResponse{
+			Status:  1,
+			Message: "Login attempt initiated",
+		}, 200)
 
 	})
 
-	router.Get("/v1/profile/:username/fetch", func(w *http.ResponseWriter, req *utility.Request) {
-
-		fmt.Fprintf(*w, "Current route profile, %s", req.Params["username"])
-
+	router.Get("/v1/profile/:username/fetch", func(res *utility.Response, req *utility.Request) {
+		res.Send(utility.CustomResponse{
+			Status:  1,
+			Message: "Profile fetched successfully",
+			Data:    req.Params["username"],
+		}, 200)
 	})
 
 }
