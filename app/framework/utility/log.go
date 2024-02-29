@@ -2,18 +2,18 @@ package utility
 
 import "fmt"
 
-func LogSuccess(text string) {
-	fmt.Println("\033[32m" + text + "\033[0m")
+func LogSuccess(text any) {
+	fmt.Printf("\033[32m %s \033[0m\n", text)
 }
 
-func LogError(text string) {
-	fmt.Println("\033[31m" + text + " \033[0m\n")
+func LogError(text any) {
+	fmt.Printf("\033[31m %s \033[0m\n", text)
 }
 
-func LogWarning(text string) {
-	fmt.Println("\033[33m" + text + " \033[0m\n")
+func LogWarning(text any) {
+	fmt.Printf("\033[33m %s \033[0m\n", text)
 }
 
-func LogNeutral(text string) {
-	fmt.Println("\033[35m" + text + " \033[0m\n")
+func LogNeutral(text any) {
+	fmt.Printf("\033[35m %s \033[0m\n", text)
 }

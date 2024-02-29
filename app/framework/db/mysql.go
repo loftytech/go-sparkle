@@ -19,14 +19,16 @@ func Init() {
 	_db = db
 }
 
-func Query(query string) {
-	_db.Query(query)
+func Query(query string) (*sql.Rows, error) {
+	v, err :=  _db.Query(query)
+	return v, err
 }
 
-func Exec(query string) {
-	_, err := _db.Exec(query)
+func Exec(query string) (sql.Result, error) {
+	v, err := _db.Exec(query)
+	return v, err
+}
 
-	if err != nil {
-		log.Fatal(err)
-	}
+func GetDBInstance() *sql.DB {
+	return _db
 }

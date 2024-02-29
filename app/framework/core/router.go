@@ -75,7 +75,7 @@ type Route struct {
 
 func (r *Route) resolveRoute() {
 	path := r.path
-	fmt.Println("resolveRoute path: ", path)
+	// fmt.Println("resolveRoute path: ", path)
 	splited_path := strings.Split(path[1:], "/")
 	filteredParamsPath := ""
 	params := map[int]string{}
