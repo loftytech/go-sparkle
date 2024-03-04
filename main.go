@@ -1,7 +1,7 @@
 package main
 
 import (
-	// core "coralscale/app/framework/core"
+	core "coralscale/app/framework/core"
 	"coralscale/app/framework/db"
 	"coralscale/app/framework/migration"
 	"coralscale/routes"
@@ -12,5 +12,5 @@ func main() {
 
 	db.Init()
 	migration.AutoMigrate()
-	// core.InitWebService(core.Handler)
+	core.InitWebService(core.Handler)
 }

@@ -20,12 +20,17 @@ func Init() {
 }
 
 func Query(query string) (*sql.Rows, error) {
-	v, err :=  _db.Query(query)
+	v, err := _db.Query(query)
 	return v, err
 }
 
 func Exec(query string) (sql.Result, error) {
 	v, err := _db.Exec(query)
+
+	if err != nil {
+		panic(err.Error())
+	}
+
 	return v, err
 }
 

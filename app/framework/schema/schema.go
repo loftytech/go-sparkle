@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strconv"
-	
 	"strings"
 )
 
@@ -21,24 +20,27 @@ type TableStruct struct {
 	Extra   string         `json:"Extra"`
 }
 
-var newTableSlice []TableStruct
-var newTableMap []map[string]string
 
-var savedTableSlice []TableStruct
-var savedTableMap []map[string]string
-
-var savedTableJsonString string
-var newTableJsonString string
 
 type Schema struct {
 	TableName   string
 	columns     []Column
 	schema_sql  string
+	newTableSlice []TableStruct
+	newTableMap []map[string]string
+	savedTableSlice []TableStruct
+	savedTableMap []map[string]string
+	savedTableJsonString string
+	newTableJsonString string
 	primary_key string
 	skippedMigration bool
+	useTimestamps bool
 	modificationList []map[string]string
 	columnDropList []map[string]string
 	replacedColumnList []string
+	current_column_index int
+	num_primary_keys int
+	current_column string
 }
 
 type Column struct {
@@ -48,6 +50,7 @@ type Column struct {
 }
 
 func (s *Schema) Id() {
+	s.current_column = "id"
 	s.columns = append(s.columns, Column{
 		Name: "id",
 		Type: "bigint(20)",
@@ -58,9 +61,12 @@ func (s *Schema) Id() {
 
 	if len(s.columns) > 1 {
 		append_comma = ","
+		s.current_column_index++
+	} else {
+		s.current_column_index = 0
 	}
 
-	newTableSlice = append(newTableSlice, TableStruct{
+	s.newTableSlice = append(s.newTableSlice, TableStruct{
 		Field: "id",
 		Type:  "bigint(20)",
 		Null:  "NO",
@@ -76,7 +82,72 @@ func (s *Schema) Id() {
 	s.primary_key = ", PRIMARY KEY (id)"
 }
 
+func (s *Schema) Integer(name string) *Schema {
+	s.current_column = name
+	s.columns = append(s.columns, Column{
+		Name: name,
+		Type: "bigint(20)",
+	})
+
+	append_comma := ""
+
+	if len(s.columns) > 1 {
+		append_comma = ","
+		s.current_column_index++
+	} else {
+		s.current_column_index = 0
+	}
+
+	s.newTableSlice = append(s.newTableSlice, TableStruct{
+		Field: name,
+		Type:  "bigint(20)",
+		Null:  "NO",
+		Key:   "",
+		Default: sql.NullString{
+			String: "",
+			Valid:  false,
+		},
+		Extra: "",
+	})
+
+	s.schema_sql = s.schema_sql + append_comma + " `" + name + "` bigint(20) NOT NULL"
+	return s
+}
+
+
+func (s *Schema) Double(name string) {
+	s.current_column = name
+	s.columns = append(s.columns, Column{
+		Name: name,
+		Type: "double",
+	})
+
+	append_comma := ""
+
+	if len(s.columns) > 1 {
+		append_comma = ","
+		s.current_column_index++
+	} else {
+		s.current_column_index = 0
+	}
+
+	s.newTableSlice = append(s.newTableSlice, TableStruct{
+		Field: name,
+		Type:  "double",
+		Null:  "NO",
+		Key:   "",
+		Default: sql.NullString{
+			String: "",
+			Valid:  false,
+		},
+		Extra: "",
+	})
+
+	s.schema_sql = s.schema_sql + append_comma + " `" + name + "` double NOT NULL"
+}
+
 func (s *Schema) String(name string, size int) {
+	s.current_column = name
 	s.columns = append(s.columns, Column{
 		Name: name,
 		Type: "varchar",
@@ -87,9 +158,12 @@ func (s *Schema) String(name string, size int) {
 
 	if len(s.columns) > 1 {
 		append_comma = ","
+		s.current_column_index++
+	} else {
+		s.current_column_index = 0
 	}
 
-	newTableSlice = append(newTableSlice, TableStruct{
+	s.newTableSlice = append(s.newTableSlice, TableStruct{
 		Field: name,
 		Type:  "varchar("+strconv.Itoa(size)+")",
 		Null:  "NO",
@@ -104,23 +178,125 @@ func (s *Schema) String(name string, size int) {
 	s.schema_sql = s.schema_sql + append_comma + " `" + name + "` varchar(" + strconv.Itoa(size) + ") NOT NULL"
 }
 
+func (s *Schema) Text(name string) {
+	s.current_column = name
+	s.columns = append(s.columns, Column{
+		Name: name,
+		Type: "text",
+	})
+
+	append_comma := ""
+
+	if len(s.columns) > 1 {
+		append_comma = ","
+		s.current_column_index++
+	} else {
+		s.current_column_index = 0
+	}
+
+	s.newTableSlice = append(s.newTableSlice, TableStruct{
+		Field: name,
+		Type:  "text",
+		Null:  "NO",
+		Key:   "",
+		Default: sql.NullString{
+			String: "",
+			Valid:  false,
+		},
+		Extra: "",
+	})
+
+	s.schema_sql = s.schema_sql + append_comma + " `" + name + "` text NOT NULL"
+}
+
+func (s *Schema) AutoIncrement() *Schema {
+	s.newTableSlice[s.current_column_index].Extra = "auto_increment";
+	s.schema_sql = s.schema_sql + " AUTO_INCREMENT";
+	return s
+}
+
+func (s *Schema) Primary() {
+	if (s.num_primary_keys > 0) {
+		utility.LogError("Aborting migration: Duplicate primary keys detected in " + s.TableName + " table there can only be one auto column and it must be defined as a key")
+	}
+	s.newTableSlice[s.current_column_index].Key = "PRI";
+	s.primary_key = ", PRIMARY KEY (" + s.current_column + ")";
+	s.num_primary_keys = s.num_primary_keys+1;
+}
+
+
 func (s *Schema) Create() {
+	s.useTimestamps = true
 	database = db.GetDBInstance()
 	is_exists := s.checkTabeExist()
 
 	if !is_exists {
 		s.createTable()
 	} else {
-		if newTableJsonString == savedTableJsonString {
-			utility.LogNeutral("Skipping "+s.TableName+" no changes")
-		} else {
-			s.compareColumns()
+		if (s.useTimestamps) {
+			s.enableTimestamps()
+		}
+		s.compareColumns()
+	}
+}
+
+func (s *Schema) enableTimestamps() {
+	s.checkTableExists("date_created");
+	s.checkTableExists("date_updated");
+	// s.current_column_index = s.current_column_index + 1;
+	s.newTableSlice = append(s.newTableSlice, TableStruct{
+		Field: "date_created",
+		Type:  "datetime",
+		Null:  "NO",
+		Key:   "",
+		Default: sql.NullString{
+			String: "current_timestamp()",
+			Valid:  true,
+		},
+		Extra: "",
+	})
+	
+	s.newTableSlice = append(s.newTableSlice, TableStruct{
+		Field: "date_updated",
+		Type:  "datetime",
+		Null:  "NO",
+		Key:   "",
+		Default: sql.NullString{
+			String: "current_timestamp()",
+			Valid:  true,
+		},
+		Extra: "",
+	})
+}
+
+func (s *Schema) checkTableExists (newColumn string) {
+	trimed_str := strings.TrimSpace(newColumn)
+	if (strlen(&trimed_str) < 1) {
+		panic("Aborting migration: Empty column detected in " + s.TableName + " table. Columns can't be empty")
+	}
+	for _, column := range s.newTableMap {
+		if exists_in_map(newColumn, column) {
+			panic("Aborting migration: Duplicate colunm `" + newColumn + "` detected in " + s.TableName + " table. Columns must be unique")
 		}
 	}
 }
 
+func strlen(value *string) int {
+	len := 0
+    for key := range *value {
+        len = key+1
+    }
+
+	return len
+}
+
 func (s *Schema) createTable() {
+	if (s.useTimestamps) {
+		s.schema_sql =  s.schema_sql + ", `date_created` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `date_updated` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+	}
+
 	create_table_query := "CREATE TABLE IF NOT EXISTS " + s.TableName + " (" + s.schema_sql + s.primary_key + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+
 	db.Exec(create_table_query)
 	utility.LogSuccess(s.TableName + " created successfully")
 }
@@ -134,29 +310,33 @@ func (s *Schema) checkTabeExist() bool {
 	for rows.Next() {
 		var _table TableStruct
 		rows.Scan(&_table.Field, &_table.Type, &_table.Null, &_table.Key, &_table.Default, &_table.Extra)
-		savedTableSlice = append(savedTableSlice, _table)
+		s.savedTableSlice = append(s.savedTableSlice, _table)
 	}
 
-	a, _ := json.Marshal(&savedTableSlice)
-	_ = json.Unmarshal(a, &savedTableMap)
+	// a, _ := json.Marshal(&s.savedTableSlice)
+	// _ = json.Unmarshal(a, &s.savedTableMap)
 	
-	b, _ := json.Marshal(&newTableSlice)
-	_ = json.Unmarshal(b, &newTableMap)
+	b, _ := json.Marshal(&s.newTableSlice)
+	_ = json.Unmarshal(b, &s.newTableMap)
 
-	savedTableJsonString = string(a)
-	newTableJsonString = string(b)
+	// s.savedTableJsonString = string(a)
+	// s.newTableJsonString = string(b)
 
-	// fmt.Println(savedTableSlice)
-	// fmt.Println(savedTableMap)
+	// fmt.Println(s.savedTableSlice)
+	// fmt.Println(s.savedTableMap)
 
-	// utility.LogSuccess(savedTableJsonString)
-	// utility.LogNeutral(newTableJsonString)
+	// utility.LogSuccess(s.savedTableJsonString)
+	// utility.LogNeutral(s.newTableJsonString)
+
+	// s.removeTimestampsFromNewColumns(&s.newTableSlice)
+	s.removeTimestampsFromSavedColumns(&s.savedTableSlice)
 	return true
 }
 
 
 func (s *Schema) compareColumns() {
-	if len(savedTableMap) == len(newTableMap) {
+	s.removeTimestampsFromNewColumns(&s.newTableSlice)
+	if len(s.savedTableMap) == len(s.newTableMap) {
 		s.compareAndAlterColumns()
 	} else {
 		s.getNewColumns()
@@ -166,7 +346,7 @@ func (s *Schema) compareColumns() {
 
 func (s *Schema) compareAndAlterColumns() {
 	is_columns_match := false
-	if savedTableJsonString == newTableJsonString {
+	if s.savedTableJsonString == s.newTableJsonString {
 		is_columns_match = true
 	}
 
@@ -174,13 +354,13 @@ func (s *Schema) compareAndAlterColumns() {
 		s.skippedMigration = true
 		utility.LogNeutral("Skipping " + s.TableName + " table because no changes was found")
 	} else {
-		for newColumnkey, column := range newTableMap {
+		for newColumnkey, column := range s.newTableMap {
 			new_column := s.getColumnType(column["Type"])
 
 			add_primary_key := "";
 			auto_increment_sub_query := "";
 
-			saved_column_to_alter := savedTableMap[newColumnkey]
+			saved_column_to_alter := s.savedTableMap[newColumnkey]
 
 			
 			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] != "PRI" && column["Key"] == "PRI" {
@@ -207,7 +387,7 @@ func (s *Schema) compareAndAlterColumns() {
 			} else if new_column.Type == "double" {
 				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + " NOT NULL " + auto_increment_sub_query + " " + add_primary_key + "; "
 			} else if new_column.Type == "datetime" {
-				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` DATETIME NOT NULL DEFAULT " + column["Default"] + "; "
+				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` DATETIME NOT NULL DEFAULT " + s.savedTableSlice[newColumnkey].Default.String + "; "
 			}
 
 			s.modificationList = append(s.modificationList, map[string]string{
@@ -265,15 +445,15 @@ func (s *Schema) compareAndAlterColumns() {
 func (s *Schema) getNewColumns() {
 	s.filterColumnsToDrop();
 
-	saved_table_length := len(savedTableMap);
-	for newColumnkey, column := range newTableMap {
+	saved_table_length := len(s.savedTableMap);
+	for newColumnkey, column := range s.newTableMap {
 		new_column := s.getColumnType(column["Type"])
 
 		auto_increment_sub_query := ""
 		add_primary_key := ""
 
 		if newColumnkey < saved_table_length {
-			saved_column_to_alter := savedTableMap[newColumnkey]
+			saved_column_to_alter := s.savedTableMap[newColumnkey]
 			
 			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] != "PRI" && column["Key"] == "PRI" {
 				add_primary_key = ", add PRIMARY KEY (`" + column["Field"] + "`)"
@@ -299,7 +479,7 @@ func (s *Schema) getNewColumns() {
 			} else if new_column.Type == "double" {
 				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + " NOT NULL " + auto_increment_sub_query + " " + add_primary_key +"; "
 			} else if new_column.Type == "datetime" {
-				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` DATETIME NOT NULL DEFAULT " + column["Default"] + "; "
+				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` DATETIME NOT NULL DEFAULT " + s.savedTableSlice[newColumnkey].Default.String + "; "
 			}
 
 			s.modificationList = append(s.modificationList, map[string]string{
@@ -353,7 +533,7 @@ func (s *Schema) getNewColumns() {
 		} else {
 			alter_after_sub_query := ""
 			if newColumnkey != 0 {
-				previous_column_field := s.getPreviousColumn(newTableMap, newColumnkey)["Field"];
+				previous_column_field := s.getPreviousColumn(s.newTableMap, newColumnkey)["Field"];
 				alter_after_sub_query = "AFTER `" + previous_column_field + "`"
 			} else {
 				alter_after_sub_query = "FIRST"
@@ -395,7 +575,7 @@ type ColumnTypeStruct struct {
 }
 
 func (s *Schema) getColumnType(field string) ColumnTypeStruct {
-	field_arry := strings.Split("(", field);
+	field_arry := strings.Split(field, "(");
 	openParenthesis := '('
 
 	if strings.ContainsRune(field, openParenthesis) {
@@ -413,13 +593,13 @@ func (s *Schema) getColumnType(field string) ColumnTypeStruct {
 }
 
 func (s *Schema) filterColumnsToDrop() {
-	new_table_length := len(newTableMap)
-	if new_table_length < len(savedTableMap) {
+	new_table_length := len(s.newTableMap)
+	if new_table_length < len(s.savedTableMap) {
 		utility.LogWarning("Some columns would be dropped");
-		colums_to_be_dropped := savedTableMap;
+		colums_to_be_dropped := []map[string]string{};
 		filtered_column_list := []map[string]string{};
 
-		for savedColumnKey, savedColumn := range savedTableMap {
+		for savedColumnKey, savedColumn := range s.savedTableMap {
 			/*
 			*
 			*   Check for columns that already exists in the table
@@ -427,20 +607,22 @@ func (s *Schema) filterColumnsToDrop() {
 			*/
 
 			if savedColumnKey < new_table_length {
-				// Log::success($savedColumn["Field"] ." will not be droped");
 				filtered_column_list = append(filtered_column_list, savedColumn)
-				colums_to_be_dropped = append(colums_to_be_dropped[:savedColumnKey], colums_to_be_dropped[savedColumnKey+1:]...)
+			} else {
+				colums_to_be_dropped = append(colums_to_be_dropped, savedColumn)
 			}
 		}
 
+		
+
 		for _, colum_to_be_dropped := range colums_to_be_dropped {
 			s.modificationList = append(s.modificationList, map[string]string{
-				"sql": "ALTER TABLE `" + s.TableName + "` DROP `" + colum_to_be_dropped["Field"] + "; ",
+				"sql": "ALTER TABLE `" + s.TableName + "` DROP `" + colum_to_be_dropped["Field"] + "`; ",
 				"operation_type": "ALTER_DROP",
 			})
 		}
 
-		savedTableMap = filtered_column_list
+		s.savedTableMap = filtered_column_list
 	}
 }
 
@@ -449,18 +631,19 @@ func (s *Schema) getPreviousColumn(arr []map[string]string, key int) map[string]
 }
 
 func (s *Schema) migrateSchema()  {
+	// utility.LogNeutral("running migration ...")
 	for _, column_drop_query := range s.columnDropList {
-		// Log::warning($column_drop_query["sql"]);
 		db.Exec(column_drop_query["sql"])
 	}
+
 	for _, modification := range s.modificationList {
 		if modification["operation_type"] == "ALTER_CHANGE_COLUMN" {
-			if in_array(modification["from"], s.replacedColumnList) {
+			if exists_in_slice(modification["from"], s.replacedColumnList) {
 				checkedColumn := s.checkColumnExists(modification["to"])
-				if checkedColumn["exists"] {
+				if checkedColumn.exists {
 					if modification["from"] != modification["to"] {
 						s.replacedColumnList = append(s.replacedColumnList, modification["to"])
-						column = s.getColumnType(checkedColumn["data"].Type)
+						column := s.getColumnType(checkedColumn.data.Type)
 						s.buildAndRunQuery(QueryBuildStrct{
 							QueryType: "ALTER_CHANGE_COLUMN", 
 							From: modification["to"], 
@@ -469,19 +652,18 @@ func (s *Schema) migrateSchema()  {
 							Limit: column.Limit, 
 							FromType: modification["from_type"], 
 							ToType: modification["to_type"], 
-							Extras: checkedColumn["data"].Extra,
+							Extras: checkedColumn.data.Extra,
 						})
 					}
 				}
-				// strings.Replace(field_arry[1], ")", "", -1),
 				new_sql := strings.Replace( "CHANGE `" + modification["from"] + "_ALTERED`", modification["sql"], "CHANGE `" + modification["from"] + "`", -1);
 				db.Exec(new_sql)
 			} else {
-				checkedColumn = s.checkColumnExists(modification["to"])
-				if checkedColumn["exists"] {
+				checkedColumn := s.checkColumnExists(modification["to"])
+				if checkedColumn.exists {
 					if modification["from"] != modification["to"] {
 						s.replacedColumnList = append(s.replacedColumnList, modification["to"])
-						column = s.getColumnType(checkedColumn.data.Type);
+						column := s.getColumnType(checkedColumn.data.Type);
 
 						s.buildAndRunQuery(QueryBuildStrct{
 							QueryType: "ALTER_CHANGE_COLUMN", 
@@ -491,7 +673,7 @@ func (s *Schema) migrateSchema()  {
 							Limit: column.Limit, 
 							FromType: modification["from_type"], 
 							ToType: modification["to_type"], 
-							Extras: checkedColumn["data"].Extra,
+							Extras: checkedColumn.data.Extra,
 						})
 
 						s.clearColumn(ClearFormStruct{
@@ -500,7 +682,6 @@ func (s *Schema) migrateSchema()  {
 							fromType: modification["from_type"],
 							toType: modification["to_type"],
 						});
-						// Log::neutral(modification["sql"]);
 						db.Exec(modification["sql"]);
 					} else {
 						s.clearColumn(ClearFormStruct{
@@ -509,7 +690,6 @@ func (s *Schema) migrateSchema()  {
 							fromType: modification["from_type"],
 							toType: modification["to_type"],
 						});
-						// Log::neutral(modification["sql"]);
 						db.Exec(modification["sql"]);
 					}
 				} else {
@@ -523,9 +703,7 @@ func (s *Schema) migrateSchema()  {
 				}
 			}
 
-			// Log::neutral(modification["sql"]);
 		} else {
-			// Log::neutral(modification["sql"]);
 			db.Exec(modification["sql"]);
 		}
 
@@ -536,33 +714,51 @@ func (s *Schema) migrateSchema()  {
 	}
 }
 
-func in_array(target map[string]string, slice []map[string]string) bool {
+// func in_array(target map[string]string, slice []map[string]string) bool {
+//     for _, m := range slice {
+//         if mapsEqual(m, target) {
+//             return true
+//         }
+//     }
+//     return false
+// }
+
+func exists_in_slice(target string, slice []string) bool {
     for _, m := range slice {
-        if mapsEqual(m, target) {
+        if m == target {
             return true
         }
     }
     return false
 }
 
-func mapsEqual(a, b map[string]string) bool {
-    if len(a) != len(b) {
-        return false
-    }
-    for key, valA := range a {
-        if valB, ok := b[key]; !ok || valA != valB {
-            return false
+func exists_in_map(target string, slice map[string]string) bool {
+    for _, m := range slice {
+        if m == target {
+            return true
         }
     }
-    return true
+    return false
 }
+
+// func mapsEqual(a, b map[string]string) bool {
+//     if len(a) != len(b) {
+//         return false
+//     }
+//     for key, valA := range a {
+//         if valB, ok := b[key]; !ok || valA != valB {
+//             return false
+//         }
+//     }
+//     return true
+// }
 
 type CheckColumeReturnStruct struct {
 	exists bool
 	data TableStruct
 }
 
-func (s *Schema) checkColumnExists (column map[string]string) CheckColumeReturnStruct {
+func (s *Schema) checkColumnExists (column string) CheckColumeReturnStruct {
 	query := "DESCRIBE " + s.TableName;
 	
 	var _tableSlice []TableStruct
@@ -572,7 +768,8 @@ func (s *Schema) checkColumnExists (column map[string]string) CheckColumeReturnS
 
 	rows, error := database.Query(query)
 	if error != nil {
-		// return false
+		utility.LogError("caling panic")
+		panic(error.Error())
 	}
 
 	for rows.Next() {
@@ -586,7 +783,7 @@ func (s *Schema) checkColumnExists (column map[string]string) CheckColumeReturnS
 	_ = json.Unmarshal(b, &_tableMap)
 
 	for savedColumnKey, savedColumn := range _tableMap {
-		if column["Field"] == savedColumn["field"] {
+		if exists_in_map(column, savedColumn) {
 			colunm_data = _tableSlice[savedColumnKey]
 			column_exists = true
 			break
@@ -671,4 +868,42 @@ func Contains(target string, slice []string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Schema) removeTimestampsFromNewColumns (tableSlice *[]TableStruct) {	
+	var _tableSlice []TableStruct = *tableSlice
+
+	table_columns_length := len(_tableSlice)
+
+	if s.useTimestamps {
+		date_created_index := table_columns_length-2
+		date_updated_index := table_columns_length-1
+		if  len(_tableSlice) > 2 && _tableSlice[date_created_index].Field == "date_created" && _tableSlice[date_updated_index].Field == "date_updated" {
+			// _tableSlice = append(_tableSlice[:date_created_index], _tableSlice[date_created_index+2:]...)
+			utility.LogBlue("preserving timestamps if exist")
+		}
+	}
+
+	a, _ := json.Marshal(&_tableSlice)
+	_ = json.Unmarshal(a, &s.newTableMap)
+	s.newTableJsonString = string(a)
+}
+
+func (s *Schema) removeTimestampsFromSavedColumns (tableSlice *[]TableStruct) {
+	var _tableSlice []TableStruct = *tableSlice
+
+	table_columns_length := len(_tableSlice)
+
+	if s.useTimestamps {
+		date_created_index := table_columns_length-2
+		date_updated_index := table_columns_length-1
+		if len(_tableSlice) > 2 && _tableSlice[date_created_index].Field == "date_created" && _tableSlice[date_updated_index].Field == "date_updated" {
+			// _tableSlice = append(_tableSlice[:date_created_index], _tableSlice[date_created_index+2:]...)
+			utility.LogBlue("preserving timestamps if exist")
+		}
+	}
+	
+	a, _ := json.Marshal(&_tableSlice)
+	_ = json.Unmarshal(a, &s.savedTableMap)
+	s.savedTableJsonString = string(a)
 }

@@ -17,3 +17,8 @@ func LogWarning(text any) {
 func LogNeutral(text any) {
 	fmt.Printf("\033[35m %s \033[0m\n", text)
 }
+
+
+func LogBlue(text any) {
+	fmt.Printf("\033[34m %s \033[0m\n", text)
+}
