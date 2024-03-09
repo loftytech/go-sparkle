@@ -5,6 +5,7 @@ import (
 	"coralscale/app/framework/utility"
 	"database/sql"
 	"encoding/json"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -20,27 +21,25 @@ type TableStruct struct {
 	Extra   string         `json:"Extra"`
 }
 
-
-
 type Schema struct {
-	TableName   string
-	columns     []Column
-	schema_sql  string
-	newTableSlice []TableStruct
-	newTableMap []map[string]string
-	savedTableSlice []TableStruct
-	savedTableMap []map[string]string
+	TableName            string
+	columns              []Column
+	schema_sql           string
+	newTableSlice        []TableStruct
+	newTableMap          []map[string]string
+	savedTableSlice      []TableStruct
+	savedTableMap        []map[string]string
 	savedTableJsonString string
-	newTableJsonString string
-	primary_key string
-	skippedMigration bool
-	useTimestamps bool
-	modificationList []map[string]string
-	columnDropList []map[string]string
-	replacedColumnList []string
+	newTableJsonString   string
+	primary_key          string
+	skippedMigration     bool
+	useTimestamps        bool
+	modificationList     []map[string]string
+	columnDropList       []map[string]string
+	replacedColumnList   []string
 	current_column_index int
-	num_primary_keys int
-	current_column string
+	num_primary_keys     int
+	current_column       string
 }
 
 type Column struct {
@@ -114,7 +113,6 @@ func (s *Schema) Integer(name string) *Schema {
 	return s
 }
 
-
 func (s *Schema) Double(name string) {
 	s.current_column = name
 	s.columns = append(s.columns, Column{
@@ -165,7 +163,7 @@ func (s *Schema) String(name string, size int) {
 
 	s.newTableSlice = append(s.newTableSlice, TableStruct{
 		Field: name,
-		Type:  "varchar("+strconv.Itoa(size)+")",
+		Type:  "varchar(" + strconv.Itoa(size) + ")",
 		Null:  "NO",
 		Key:   "",
 		Default: sql.NullString{
@@ -210,20 +208,62 @@ func (s *Schema) Text(name string) {
 }
 
 func (s *Schema) AutoIncrement() *Schema {
-	s.newTableSlice[s.current_column_index].Extra = "auto_increment";
-	s.schema_sql = s.schema_sql + " AUTO_INCREMENT";
+	s.newTableSlice[s.current_column_index].Extra = "auto_increment"
+	s.schema_sql = s.schema_sql + " AUTO_INCREMENT"
 	return s
 }
 
 func (s *Schema) Primary() {
-	if (s.num_primary_keys > 0) {
+	if s.num_primary_keys > 0 {
 		utility.LogError("Aborting migration: Duplicate primary keys detected in " + s.TableName + " table there can only be one auto column and it must be defined as a key")
 	}
-	s.newTableSlice[s.current_column_index].Key = "PRI";
-	s.primary_key = ", PRIMARY KEY (" + s.current_column + ")";
-	s.num_primary_keys = s.num_primary_keys+1;
+	s.newTableSlice[s.current_column_index].Key = "PRI"
+	s.primary_key = ", PRIMARY KEY (" + s.current_column + ")"
+	s.num_primary_keys = s.num_primary_keys + 1
 }
 
+func CreateModel(m interface{}) {
+	model := m
+
+	v := reflect.ValueOf(model)
+	t := v.Type()
+
+	tableName := t.Name()
+
+	schema := Schema{
+		TableName: strings.ToLower(tableName),
+	}
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		fieldName := strings.ToLower(field.Name)
+		// value := v.Field(i).Interface()
+		fieldType := v.Field(i).Type().Name()
+		// tagName := field.Tag.Get("orm")
+
+		// utility.LogBlue("tagName: " + tagName)
+
+		if i == 0 {
+			if i == 0 && fieldType == "int" {
+				schema.Id()
+			} else {
+				utility.LogError("First field must be an integer which would be the primary key")
+				panic("")
+			}
+		} else {
+			if fieldType == "int" {
+				schema.Integer(fieldName)
+			}
+
+			if fieldType == "string" {
+				schema.String(fieldName, 64)
+			}
+		}
+		// fmt.Printf("Field Name: %s, Field Value: %v type: %v \n", field.Name, value, fieldType)
+	}
+
+	schema.Create()
+}
 
 func (s *Schema) Create() {
 	s.useTimestamps = true
@@ -233,7 +273,7 @@ func (s *Schema) Create() {
 	if !is_exists {
 		s.createTable()
 	} else {
-		if (s.useTimestamps) {
+		if s.useTimestamps {
 			s.enableTimestamps()
 		}
 		s.compareColumns()
@@ -241,8 +281,8 @@ func (s *Schema) Create() {
 }
 
 func (s *Schema) enableTimestamps() {
-	s.checkTableExists("date_created");
-	s.checkTableExists("date_updated");
+	s.checkTableExists("date_created")
+	s.checkTableExists("date_updated")
 	// s.current_column_index = s.current_column_index + 1;
 	s.newTableSlice = append(s.newTableSlice, TableStruct{
 		Field: "date_created",
@@ -255,7 +295,7 @@ func (s *Schema) enableTimestamps() {
 		},
 		Extra: "",
 	})
-	
+
 	s.newTableSlice = append(s.newTableSlice, TableStruct{
 		Field: "date_updated",
 		Type:  "datetime",
@@ -269,9 +309,9 @@ func (s *Schema) enableTimestamps() {
 	})
 }
 
-func (s *Schema) checkTableExists (newColumn string) {
+func (s *Schema) checkTableExists(newColumn string) {
 	trimed_str := strings.TrimSpace(newColumn)
-	if (strlen(&trimed_str) < 1) {
+	if strlen(&trimed_str) < 1 {
 		panic("Aborting migration: Empty column detected in " + s.TableName + " table. Columns can't be empty")
 	}
 	for _, column := range s.newTableMap {
@@ -283,16 +323,16 @@ func (s *Schema) checkTableExists (newColumn string) {
 
 func strlen(value *string) int {
 	len := 0
-    for key := range *value {
-        len = key+1
-    }
+	for key := range *value {
+		len = key + 1
+	}
 
 	return len
 }
 
 func (s *Schema) createTable() {
-	if (s.useTimestamps) {
-		s.schema_sql =  s.schema_sql + ", `date_created` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `date_updated` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+	if s.useTimestamps {
+		s.schema_sql = s.schema_sql + ", `date_created` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, `date_updated` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
 	}
 
 	create_table_query := "CREATE TABLE IF NOT EXISTS " + s.TableName + " (" + s.schema_sql + s.primary_key + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
@@ -315,7 +355,7 @@ func (s *Schema) checkTabeExist() bool {
 
 	// a, _ := json.Marshal(&s.savedTableSlice)
 	// _ = json.Unmarshal(a, &s.savedTableMap)
-	
+
 	b, _ := json.Marshal(&s.newTableSlice)
 	_ = json.Unmarshal(b, &s.newTableMap)
 
@@ -332,7 +372,6 @@ func (s *Schema) checkTabeExist() bool {
 	s.removeTimestampsFromSavedColumns(&s.savedTableSlice)
 	return true
 }
-
 
 func (s *Schema) compareColumns() {
 	s.removeTimestampsFromNewColumns(&s.newTableSlice)
@@ -357,12 +396,11 @@ func (s *Schema) compareAndAlterColumns() {
 		for newColumnkey, column := range s.newTableMap {
 			new_column := s.getColumnType(column["Type"])
 
-			add_primary_key := "";
-			auto_increment_sub_query := "";
+			add_primary_key := ""
+			auto_increment_sub_query := ""
 
 			saved_column_to_alter := s.savedTableMap[newColumnkey]
 
-			
 			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] != "PRI" && column["Key"] == "PRI" {
 				add_primary_key = ", add PRIMARY KEY (`" + column["Field"] + "`)"
 				auto_increment_sub_query = " AUTO_INCREMENT"
@@ -375,65 +413,65 @@ func (s *Schema) compareAndAlterColumns() {
 			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] == "PRI" {
 				auto_increment_sub_query = " AUTO_INCREMENT"
 			}
-		
+
 			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] == "auto_increment" {
 				auto_increment_sub_query = " AUTO_INCREMENT"
 			}
 
 			mod_sql := "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + "(" + new_column.Limit + ") NOT NULL " + auto_increment_sub_query + " " + add_primary_key + "; "
-			
+
 			if new_column.Type == "text" {
 				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + " NOT NULL " + auto_increment_sub_query + " " + add_primary_key + "; "
 			} else if new_column.Type == "double" {
 				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + " NOT NULL " + auto_increment_sub_query + " " + add_primary_key + "; "
 			} else if new_column.Type == "datetime" {
-				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` DATETIME NOT NULL DEFAULT " + s.savedTableSlice[newColumnkey].Default.String + "; "
+				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP; "
 			}
 
 			s.modificationList = append(s.modificationList, map[string]string{
-				"sql": mod_sql,
-				"from": saved_column_to_alter["Field"],
-				"to": column["Field"],
-				"from_type": saved_column_to_alter["Type"],
-				"to_type": column["Type"],
+				"sql":            mod_sql,
+				"from":           saved_column_to_alter["Field"],
+				"to":             column["Field"],
+				"from_type":      saved_column_to_alter["Type"],
+				"to_type":        column["Type"],
 				"operation_type": "ALTER_CHANGE_COLUMN",
 			})
-	
+
 			if column["Extra"] != "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] != "PRI" && column["Key"] == "PRI" {
 				s.modificationList = append(s.modificationList, map[string]string{
-					"sql": "ALTER TABLE `" + s.TableName + "` ADD PRIMARY KEY(`" + column["Field"] + "`);",
+					"sql":            "ALTER TABLE `" + s.TableName + "` ADD PRIMARY KEY(`" + column["Field"] + "`);",
 					"operation_type": "ALTER_ADD_PRIMARY_KEY",
 				})
 			}
 
 			if column["Extra"] != "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] == "PRI" && column["Key"] != "PRI" {
 				s.columnDropList = append(s.columnDropList, map[string]string{
-					"sql": "ALTER TABLE `" + s.TableName + "` DROP PRIMARY KEY;",
+					"sql":            "ALTER TABLE `" + s.TableName + "` DROP PRIMARY KEY;",
 					"operation_type": "ALTER_DROP_PRIMARY_KEY",
 				})
 			}
 
 			/*
 			*  Check if new column has a primary key
-			*/
+			 */
 
 			if column["Extra"] != "auto_increment" && saved_column_to_alter["Extra"] == "auto_increment" && saved_column_to_alter["Key"] == "PRI" && column["Key"] != "PRI" {
 				/*
 				*  Remove auto increment from current column
-				*/
+				 */
 				s.columnDropList = append(s.columnDropList, map[string]string{
-					"sql": "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + saved_column_to_alter["Field"] + "` " + saved_column_to_alter["Type"] + " NOT NULL; ",
-					"from": saved_column_to_alter["Field"],
-					"to": saved_column_to_alter["Field"],
+					"sql":            "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + saved_column_to_alter["Field"] + "` " + saved_column_to_alter["Type"] + " NOT NULL; ",
+					"from":           saved_column_to_alter["Field"],
+					"to":             saved_column_to_alter["Field"],
 					"operation_type": "ALTER_CHANGE_COLUMN",
 				})
 
 				/*
 				*  Remove primary key from table
-				*/
+				 */
 
 				s.columnDropList = append(s.columnDropList, map[string]string{
-					"sql": "ALTER TABLE `" + s.TableName + "` DROP PRIMARY KEY;",
+					"sql":            "ALTER TABLE `" + s.TableName + "` DROP PRIMARY KEY;",
 					"operation_type": "ALTER_DROP_PRIMARY_KEY",
 				})
 			}
@@ -443,9 +481,9 @@ func (s *Schema) compareAndAlterColumns() {
 }
 
 func (s *Schema) getNewColumns() {
-	s.filterColumnsToDrop();
+	s.filterColumnsToDrop()
 
-	saved_table_length := len(s.savedTableMap);
+	saved_table_length := len(s.savedTableMap)
 	for newColumnkey, column := range s.newTableMap {
 		new_column := s.getColumnType(column["Type"])
 
@@ -454,98 +492,97 @@ func (s *Schema) getNewColumns() {
 
 		if newColumnkey < saved_table_length {
 			saved_column_to_alter := s.savedTableMap[newColumnkey]
-			
+
 			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] != "PRI" && column["Key"] == "PRI" {
 				add_primary_key = ", add PRIMARY KEY (`" + column["Field"] + "`)"
 				auto_increment_sub_query = " AUTO_INCREMENT"
 			}
 
 			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] == "PRI" && column["Key"] == "PRI" {
-				auto_increment_sub_query = " AUTO_INCREMENT";
+				auto_increment_sub_query = " AUTO_INCREMENT"
 			}
 
 			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] == "PRI" {
-				auto_increment_sub_query = " AUTO_INCREMENT";
-			}
-		
-			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] == "auto_increment" {
-				auto_increment_sub_query = " AUTO_INCREMENT";
+				auto_increment_sub_query = " AUTO_INCREMENT"
 			}
 
-			mod_sql := "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + "(" + new_column.Limit + ") NOT NULL " + auto_increment_sub_query + " " + add_primary_key +"; "
-			
+			if column["Extra"] == "auto_increment" && saved_column_to_alter["Extra"] == "auto_increment" {
+				auto_increment_sub_query = " AUTO_INCREMENT"
+			}
+
+			mod_sql := "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + "(" + new_column.Limit + ") NOT NULL " + auto_increment_sub_query + " " + add_primary_key + "; "
+
 			if new_column.Type == "text" {
-				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + " NOT NULL " + auto_increment_sub_query + " " + add_primary_key +"; "
+				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + " NOT NULL " + auto_increment_sub_query + " " + add_primary_key + "; "
 			} else if new_column.Type == "double" {
-				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + " NOT NULL " + auto_increment_sub_query + " " + add_primary_key +"; "
+				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` " + new_column.Type + " NOT NULL " + auto_increment_sub_query + " " + add_primary_key + "; "
 			} else if new_column.Type == "datetime" {
 				mod_sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + column["Field"] + "` DATETIME NOT NULL DEFAULT " + s.savedTableSlice[newColumnkey].Default.String + "; "
 			}
 
 			s.modificationList = append(s.modificationList, map[string]string{
-				"sql": mod_sql,
-				"from": saved_column_to_alter["Field"],
-				"to": column["Field"],
-				"from_type": saved_column_to_alter["Type"],
-				"to_type": column["Type"],
+				"sql":            mod_sql,
+				"from":           saved_column_to_alter["Field"],
+				"to":             column["Field"],
+				"from_type":      saved_column_to_alter["Type"],
+				"to_type":        column["Type"],
 				"operation_type": "ALTER_CHANGE_COLUMN",
 			})
 
 			if column["Extra"] != "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] != "PRI" && column["Key"] == "PRI" {
 				s.modificationList = append(s.modificationList, map[string]string{
-					"sql": "ALTER TABLE `" + s.TableName + "` ADD PRIMARY KEY(`" + column["Field"] + "`);",
+					"sql":            "ALTER TABLE `" + s.TableName + "` ADD PRIMARY KEY(`" + column["Field"] + "`);",
 					"operation_type": "ADD_PRIMARY_KEY",
 				})
 			}
 
 			if column["Extra"] != "auto_increment" && saved_column_to_alter["Extra"] != "auto_increment" && saved_column_to_alter["Key"] == "PRI" && column["Key"] != "PRI" {
 				s.modificationList = append(s.modificationList, map[string]string{
-					"sql": "ALTER TABLE `" + s.TableName + "` DROP PRIMARY KEY;",
+					"sql":            "ALTER TABLE `" + s.TableName + "` DROP PRIMARY KEY;",
 					"operation_type": "DROP_PRIMARY_KEY",
 				})
 			}
 
 			/*
 			*  Check if new column has a primary key
-			*/
+			 */
 
 			if column["Extra"] != "auto_increment" && saved_column_to_alter["Extra"] == "auto_increment" && saved_column_to_alter["Key"] == "PRI" && column["Key"] != "PRI" {
 
-
 				/*
 				*  Remove auto increment from current column
-				*/
+				 */
 				s.columnDropList = append(s.columnDropList, map[string]string{
-					"sql": "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + saved_column_to_alter["Field"] + "` " + saved_column_to_alter["Type"] + " NOT NULL; ",
-					"from": saved_column_to_alter["Field"],
-					"to": saved_column_to_alter["Field"],
+					"sql":            "ALTER TABLE `" + s.TableName + "` CHANGE `" + saved_column_to_alter["Field"] + "` `" + saved_column_to_alter["Field"] + "` " + saved_column_to_alter["Type"] + " NOT NULL; ",
+					"from":           saved_column_to_alter["Field"],
+					"to":             saved_column_to_alter["Field"],
 					"operation_type": "ALTER_CHANGE_COLUMN",
 				})
-				
+
 				/*
 				*  Remove primary key from table
-				*/
+				 */
 				s.columnDropList = append(s.columnDropList, map[string]string{
-					"sql": "ALTER TABLE `" + s.TableName + "` DROP PRIMARY KEY;",
+					"sql":            "ALTER TABLE `" + s.TableName + "` DROP PRIMARY KEY;",
 					"operation_type": "ALTER_DROP_PRIMARY_KEY",
 				})
 			}
 		} else {
 			alter_after_sub_query := ""
 			if newColumnkey != 0 {
-				previous_column_field := s.getPreviousColumn(s.newTableMap, newColumnkey)["Field"];
+				previous_column_field := s.getPreviousColumn(s.newTableMap, newColumnkey)["Field"]
 				alter_after_sub_query = "AFTER `" + previous_column_field + "`"
 			} else {
 				alter_after_sub_query = "FIRST"
 			}
 
 			if column["Extra"] == "auto_increment" {
-				auto_increment_sub_query = " AUTO_INCREMENT ";
-				add_primary_key = " , add PRIMARY KEY (`" + column["Field"] + "`)";
+				auto_increment_sub_query = " AUTO_INCREMENT "
+				add_primary_key = " , add PRIMARY KEY (`" + column["Field"] + "`)"
 			}
 
 			mod_sql := "ALTER TABLE `" + s.TableName + "` ADD `" + column["Field"] + "` " + new_column.Type + "(" + new_column.Limit + ") NOT NULL " + auto_increment_sub_query + " " + alter_after_sub_query + " " + add_primary_key + "; "
-			
+
 			if new_column.Type == "text" {
 				mod_sql = "ALTER TABLE `" + s.TableName + "` ADD `" + column["Field"] + "` " + new_column.Type + " NOT NULL " + auto_increment_sub_query + " " + alter_after_sub_query + " " + add_primary_key + "; "
 			} else if new_column.Type == "double" {
@@ -555,14 +592,14 @@ func (s *Schema) getNewColumns() {
 			}
 
 			s.modificationList = append(s.modificationList, map[string]string{
-				"sql": mod_sql,
+				"sql":            mod_sql,
 				"operation_type": "ALTER_ADD_COLUMN",
 			})
 
 			if column["Extra"] != "auto_increment" && column["Key"] == "PRI" {
 				s.columnDropList = append(s.columnDropList, map[string]string{
-					"sql": "ALTER TABLE `" + s.TableName + "` ADD PRIMARY KEY(`" + column["Field"] + "`);",
-					"operation_type":"ALTER_ADD_PRIMARY_KEY",
+					"sql":            "ALTER TABLE `" + s.TableName + "` ADD PRIMARY KEY(`" + column["Field"] + "`);",
+					"operation_type": "ALTER_ADD_PRIMARY_KEY",
 				})
 			}
 		}
@@ -570,22 +607,22 @@ func (s *Schema) getNewColumns() {
 }
 
 type ColumnTypeStruct struct {
-	Type string
+	Type  string
 	Limit string
 }
 
 func (s *Schema) getColumnType(field string) ColumnTypeStruct {
-	field_arry := strings.Split(field, "(");
+	field_arry := strings.Split(field, "(")
 	openParenthesis := '('
 
 	if strings.ContainsRune(field, openParenthesis) {
 		return ColumnTypeStruct{
-			Type: field_arry[0],
+			Type:  field_arry[0],
 			Limit: strings.Replace(field_arry[1], ")", "", -1),
 		}
 	} else {
 		return ColumnTypeStruct{
-			Type: field,
+			Type:  field,
 			Limit: "1",
 		}
 	}
@@ -595,16 +632,16 @@ func (s *Schema) getColumnType(field string) ColumnTypeStruct {
 func (s *Schema) filterColumnsToDrop() {
 	new_table_length := len(s.newTableMap)
 	if new_table_length < len(s.savedTableMap) {
-		utility.LogWarning("Some columns would be dropped");
-		colums_to_be_dropped := []map[string]string{};
-		filtered_column_list := []map[string]string{};
+		utility.LogWarning("Some columns would be dropped")
+		colums_to_be_dropped := []map[string]string{}
+		filtered_column_list := []map[string]string{}
 
 		for savedColumnKey, savedColumn := range s.savedTableMap {
 			/*
 			*
 			*   Check for columns that already exists in the table
 			*
-			*/
+			 */
 
 			if savedColumnKey < new_table_length {
 				filtered_column_list = append(filtered_column_list, savedColumn)
@@ -613,11 +650,9 @@ func (s *Schema) filterColumnsToDrop() {
 			}
 		}
 
-		
-
 		for _, colum_to_be_dropped := range colums_to_be_dropped {
 			s.modificationList = append(s.modificationList, map[string]string{
-				"sql": "ALTER TABLE `" + s.TableName + "` DROP `" + colum_to_be_dropped["Field"] + "`; ",
+				"sql":            "ALTER TABLE `" + s.TableName + "` DROP `" + colum_to_be_dropped["Field"] + "`; ",
 				"operation_type": "ALTER_DROP",
 			})
 		}
@@ -627,10 +662,10 @@ func (s *Schema) filterColumnsToDrop() {
 }
 
 func (s *Schema) getPreviousColumn(arr []map[string]string, key int) map[string]string {
-	return arr[key-1];
+	return arr[key-1]
 }
 
-func (s *Schema) migrateSchema()  {
+func (s *Schema) migrateSchema() {
 	// utility.LogNeutral("running migration ...")
 	for _, column_drop_query := range s.columnDropList {
 		db.Exec(column_drop_query["sql"])
@@ -645,66 +680,66 @@ func (s *Schema) migrateSchema()  {
 						s.replacedColumnList = append(s.replacedColumnList, modification["to"])
 						column := s.getColumnType(checkedColumn.data.Type)
 						s.buildAndRunQuery(QueryBuildStrct{
-							QueryType: "ALTER_CHANGE_COLUMN", 
-							From: modification["to"], 
-							To: modification["to"] + "_ALTERED", 
-							Type: column.Type, 
-							Limit: column.Limit, 
-							FromType: modification["from_type"], 
-							ToType: modification["to_type"], 
-							Extras: checkedColumn.data.Extra,
+							QueryType: "ALTER_CHANGE_COLUMN",
+							From:      modification["to"],
+							To:        modification["to"] + "_ALTERED",
+							Type:      column.Type,
+							Limit:     column.Limit,
+							FromType:  modification["from_type"],
+							ToType:    modification["to_type"],
+							Extras:    checkedColumn.data.Extra,
 						})
 					}
 				}
-				new_sql := strings.Replace( "CHANGE `" + modification["from"] + "_ALTERED`", modification["sql"], "CHANGE `" + modification["from"] + "`", -1);
+				new_sql := strings.Replace("CHANGE `"+modification["from"]+"_ALTERED`", modification["sql"], "CHANGE `"+modification["from"]+"`", -1)
 				db.Exec(new_sql)
 			} else {
 				checkedColumn := s.checkColumnExists(modification["to"])
 				if checkedColumn.exists {
 					if modification["from"] != modification["to"] {
 						s.replacedColumnList = append(s.replacedColumnList, modification["to"])
-						column := s.getColumnType(checkedColumn.data.Type);
+						column := s.getColumnType(checkedColumn.data.Type)
 
 						s.buildAndRunQuery(QueryBuildStrct{
-							QueryType: "ALTER_CHANGE_COLUMN", 
-							From: modification["to"], 
-							To: modification["to"] + "_ALTERED", 
-							Type: column.Type, 
-							Limit: column.Limit, 
-							FromType: modification["from_type"], 
-							ToType: modification["to_type"], 
-							Extras: checkedColumn.data.Extra,
+							QueryType: "ALTER_CHANGE_COLUMN",
+							From:      modification["to"],
+							To:        modification["to"] + "_ALTERED",
+							Type:      column.Type,
+							Limit:     column.Limit,
+							FromType:  modification["from_type"],
+							ToType:    modification["to_type"],
+							Extras:    checkedColumn.data.Extra,
 						})
 
 						s.clearColumn(ClearFormStruct{
-							from: modification["from"],
-							to: modification["to"],
+							from:     modification["from"],
+							to:       modification["to"],
 							fromType: modification["from_type"],
-							toType: modification["to_type"],
-						});
-						db.Exec(modification["sql"]);
+							toType:   modification["to_type"],
+						})
+						db.Exec(modification["sql"])
 					} else {
 						s.clearColumn(ClearFormStruct{
-							from: modification["from"],
-							to: modification["to"],
+							from:     modification["from"],
+							to:       modification["to"],
 							fromType: modification["from_type"],
-							toType: modification["to_type"],
-						});
-						db.Exec(modification["sql"]);
+							toType:   modification["to_type"],
+						})
+						db.Exec(modification["sql"])
 					}
 				} else {
 					s.clearColumn(ClearFormStruct{
-						from: modification["from"],
-						to: modification["to"],
+						from:     modification["from"],
+						to:       modification["to"],
 						fromType: modification["from_type"],
-						toType: modification["to_type"],
-					});
-					db.Exec(modification["sql"]);
+						toType:   modification["to_type"],
+					})
+					db.Exec(modification["sql"])
 				}
 			}
 
 		} else {
-			db.Exec(modification["sql"]);
+			db.Exec(modification["sql"])
 		}
 
 	}
@@ -724,21 +759,21 @@ func (s *Schema) migrateSchema()  {
 // }
 
 func exists_in_slice(target string, slice []string) bool {
-    for _, m := range slice {
-        if m == target {
-            return true
-        }
-    }
-    return false
+	for _, m := range slice {
+		if m == target {
+			return true
+		}
+	}
+	return false
 }
 
 func exists_in_map(target string, slice map[string]string) bool {
-    for _, m := range slice {
-        if m == target {
-            return true
-        }
-    }
-    return false
+	for _, m := range slice {
+		if m == target {
+			return true
+		}
+	}
+	return false
 }
 
 // func mapsEqual(a, b map[string]string) bool {
@@ -755,16 +790,16 @@ func exists_in_map(target string, slice map[string]string) bool {
 
 type CheckColumeReturnStruct struct {
 	exists bool
-	data TableStruct
+	data   TableStruct
 }
 
-func (s *Schema) checkColumnExists (column string) CheckColumeReturnStruct {
-	query := "DESCRIBE " + s.TableName;
-	
+func (s *Schema) checkColumnExists(column string) CheckColumeReturnStruct {
+	query := "DESCRIBE " + s.TableName
+
 	var _tableSlice []TableStruct
 	var _tableMap []map[string]string
-	colunm_data := TableStruct{};
-	column_exists := false;
+	colunm_data := TableStruct{}
+	column_exists := false
 
 	rows, error := database.Query(query)
 	if error != nil {
@@ -777,8 +812,7 @@ func (s *Schema) checkColumnExists (column string) CheckColumeReturnStruct {
 		rows.Scan(&_table.Field, &_table.Type, &_table.Null, &_table.Key, &_table.Default, &_table.Extra)
 		_tableSlice = append(_tableSlice, _table)
 	}
-	
-	
+
 	b, _ := json.Marshal(&_tableSlice)
 	_ = json.Unmarshal(b, &_tableMap)
 
@@ -792,70 +826,70 @@ func (s *Schema) checkColumnExists (column string) CheckColumeReturnStruct {
 
 	return CheckColumeReturnStruct{
 		exists: column_exists,
-		data: colunm_data,
-	};
+		data:   colunm_data,
+	}
 }
 
 type QueryBuildStrct struct {
 	QueryType string
-	From string
-	To string
-	Type string
-	Limit string
-	FromType string
-	ToType string
-	Extras string
-	Key string
+	From      string
+	To        string
+	Type      string
+	Limit     string
+	FromType  string
+	ToType    string
+	Extras    string
+	Key       string
 }
 
 func (s *Schema) buildAndRunQuery(query QueryBuildStrct) {
 
-	auto_increment_sub_query := "";
-	add_primary_key := "";
+	auto_increment_sub_query := ""
+	add_primary_key := ""
 
-	if (query.Extras == "auto_increment") {
+	if query.Extras == "auto_increment" {
 		add_primary_key = ", add PRIMARY KEY (`" + query.To + "`)"
-		auto_increment_sub_query = " AUTO_INCREMENT";
+		auto_increment_sub_query = " AUTO_INCREMENT"
 	}
-	if (query.Key == "PRI") {
+	if query.Key == "PRI" {
 		add_primary_key = ", add PRIMARY KEY (`" + query.To + "`)"
-		auto_increment_sub_query = " AUTO_INCREMENT";
+		auto_increment_sub_query = " AUTO_INCREMENT"
 	}
 
-	if (query.QueryType == "ALTER_CHANGE_COLUMN") {
+	if query.QueryType == "ALTER_CHANGE_COLUMN" {
 		sql := "ALTER TABLE `" + s.TableName + "` CHANGE `" + query.From + "` `" + query.To + "` " + query.Type + "(" + query.Limit + ") NOT NULL " + auto_increment_sub_query + " " + add_primary_key + "; "
 
-		if Contains(query.Type, []string{"text", "datetime", "double"} ) {
+		if Contains(query.Type, []string{"text", "datetime", "double"}) {
 			sql = "ALTER TABLE `" + s.TableName + "` CHANGE `" + query.From + "` `" + query.To + "` " + query.Type + " NOT NULL " + auto_increment_sub_query + " " + add_primary_key + "; "
 		}
-		
-		db.Exec(sql);
+
+		db.Exec(sql)
 	}
 }
 
 type ClearFormStruct struct {
-	from string
-	to string
+	from     string
+	to       string
 	fromType string
-	toType string
+	toType   string
 }
 
 func (s *Schema) clearColumn(clear ClearFormStruct) {
 	raw_fromType := s.getColumnType(clear.fromType)
 	raw_toType := s.getColumnType(clear.toType)
 	// echo "to: $to (raw_toType.Type) from: $from (raw_fromType.Type) \n";
-	if (raw_fromType.Type != "" && raw_toType.Type != "" && raw_fromType.Type != raw_toType.Type) {
-		if (Contains(strings.ToLower(raw_toType.Type), []string{"int", "bigint", "double"}) && Contains(strings.ToLower(raw_fromType.Type), []string{"varchar", "text", "datetime"})) {
+	if raw_fromType.Type != "" && raw_toType.Type != "" && raw_fromType.Type != raw_toType.Type {
+		if Contains(strings.ToLower(raw_toType.Type), []string{"int", "bigint", "double"}) && Contains(strings.ToLower(raw_fromType.Type), []string{"varchar", "text", "datetime"}) {
 			update_sql := "UPDATE `" + s.TableName + "` SET `" + clear.from + "`=0"
 			// echo "$$update_sql\n";
 			// Log::warning($update_sql);
-			db.Exec(update_sql);
+			db.Exec(update_sql)
 		} else {
 			if Contains(strings.ToLower(raw_toType.Type), []string{"datetime"}) {
 				update_sql := "UPDATE `" + s.TableName + "` SET `" + clear.from + "`='0000-00-00 00:00:00'"
 				// echo "$$update_sql\n";
 				// Log::warning($update_sql);
-				db.Exec(update_sql);
+				db.Exec(update_sql)
 			}
 		}
 	}
@@ -870,15 +904,15 @@ func Contains(target string, slice []string) bool {
 	return false
 }
 
-func (s *Schema) removeTimestampsFromNewColumns (tableSlice *[]TableStruct) {	
+func (s *Schema) removeTimestampsFromNewColumns(tableSlice *[]TableStruct) {
 	var _tableSlice []TableStruct = *tableSlice
 
 	table_columns_length := len(_tableSlice)
 
 	if s.useTimestamps {
-		date_created_index := table_columns_length-2
-		date_updated_index := table_columns_length-1
-		if  len(_tableSlice) > 2 && _tableSlice[date_created_index].Field == "date_created" && _tableSlice[date_updated_index].Field == "date_updated" {
+		date_created_index := table_columns_length - 2
+		date_updated_index := table_columns_length - 1
+		if len(_tableSlice) > 2 && _tableSlice[date_created_index].Field == "date_created" && _tableSlice[date_updated_index].Field == "date_updated" {
 			// _tableSlice = append(_tableSlice[:date_created_index], _tableSlice[date_created_index+2:]...)
 			utility.LogBlue("preserving timestamps if exist")
 		}
@@ -889,20 +923,20 @@ func (s *Schema) removeTimestampsFromNewColumns (tableSlice *[]TableStruct) {
 	s.newTableJsonString = string(a)
 }
 
-func (s *Schema) removeTimestampsFromSavedColumns (tableSlice *[]TableStruct) {
+func (s *Schema) removeTimestampsFromSavedColumns(tableSlice *[]TableStruct) {
 	var _tableSlice []TableStruct = *tableSlice
 
 	table_columns_length := len(_tableSlice)
 
 	if s.useTimestamps {
-		date_created_index := table_columns_length-2
-		date_updated_index := table_columns_length-1
+		date_created_index := table_columns_length - 2
+		date_updated_index := table_columns_length - 1
 		if len(_tableSlice) > 2 && _tableSlice[date_created_index].Field == "date_created" && _tableSlice[date_updated_index].Field == "date_updated" {
 			// _tableSlice = append(_tableSlice[:date_created_index], _tableSlice[date_created_index+2:]...)
 			utility.LogBlue("preserving timestamps if exist")
 		}
 	}
-	
+
 	a, _ := json.Marshal(&_tableSlice)
 	_ = json.Unmarshal(a, &s.savedTableMap)
 	s.savedTableJsonString = string(a)

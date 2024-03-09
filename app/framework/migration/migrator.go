@@ -1,8 +1,11 @@
 package migration
 
-import "coralscale/app/schema"
+import (
+	"coralscale/app/framework/schema"
+	"coralscale/app/models"
+)
 
 func AutoMigrate() {
-	schema.UserSchema()
-	schema.ProfileSchema()
+	schema.CreateModel(models.User{})
+	schema.CreateModel(models.Profile{})
 }
