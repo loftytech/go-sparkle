@@ -12,5 +12,5 @@ func InitWebService(handler func(http.ResponseWriter, *http.Request)) {
 	utility.LoadEnv()
 	port := utility.GetEnv("PORT", "8080")
 	fmt.Println("Running server on port: " + port)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":" + port, nil))
 }
