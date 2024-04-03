@@ -3,12 +3,14 @@ package core
 import (
 	"coralscale/app/framework/utility"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
 
 type RequestRoute struct {
 	method             string
+	body               []byte
 	path               string
 	filteredParamsPath string
 	params             []string
@@ -55,7 +57,7 @@ func (r *RequestRoute) resolveRequestRoute(w *http.ResponseWriter) {
 		// 	param_map[value] = splited_path[idx]
 		// }
 
-		request := utility.HandleSetRequest(v.method, v.path, param_map, w)
+		request := utility.HandleSetRequest(v.method, v.path, param_map, w, r.body)
 		response := utility.Response{ResponseWriter: w}
 
 		v.handler(&response, &request)
@@ -126,8 +128,11 @@ func validateRoute(method string, path string, handler func(response *utility.Re
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
+
 	requestData = RequestRoute{
 		method:             r.Method,
+		body:               body,
 		path:               r.URL.Path,
 		filteredParamsPath: "",
 		params:             []string{},
